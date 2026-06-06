@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>데이트 코스 카톡 공유</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    background: #f5f5f7; color: #1c1c1e;
+    -webkit-text-size-adjust: 100%;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #000; color: #f2f2f7; }
+    textarea { background: #1c1c1e; color: #f2f2f7; border-color: #38383a; }
+    .hint { color: #98989d; }
+  }
+  h1 { font-size: 18px; margin: 4px 0 12px; }
+  textarea {
+    width: 100%; min-height: 42vh; padding: 12px;
+    font-size: 14px; line-height: 1.5; border: 1px solid #d1d1d6; border-radius: 12px;
+    background: #fff; color: #1c1c1e; resize: vertical; white-space: pre-wrap;
+  }
+  button {
+    width: 100%; padding: 16px; margin-top: 12px;
+    font-size: 17px; font-weight: 600; border: none; border-radius: 14px;
+    color: #fff; background: #fae100; color: #3c1e1e; cursor: pointer;
+  }
+  button.copy { background: #007aff; color: #fff; }
+  .hint { font-size: 13px; color: #6e6e73; margin-top: 10px; line-height: 1.5; }
+  .err { color: #ff3b30; }
+</style>
+</head>
+<body>
+  <h1>💌 데이트 코스 — 카톡으로 공유</h1>
+  <textarea id="out" readonly aria-label="공유 텍스트"></textarea>
+  <button id="share">📤 카카오톡으로 공유하기</button>
+  <button id="copy" class="copy">📋 텍스트 복사</button>
+  <p class="hint" id="hint">
+    공유 버튼을 누르면 앱 선택 창이 뜹니다 → <b>카카오톡</b> 선택 → 받는 사람(아내) 선택.<br>
+    링크는 글자 그대로 들어가서 카톡에서 자동으로 눌러집니다.
+  </p>
+
+<script>
+  // ---- base64url(UTF-8) 디코드 ----
+  function b64urlDecode(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    const bin = atob(s);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+
+  // ---- 마크다운 링크 [명칭](url) -> "명칭\nurl" 생링크 변환 ----
+  // 같은 줄에 링크가 여러 개여도 각각 처리. 링크 뒤 텍스트는 보존.
+  function toBareLinks(md) {
+    return md.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
+      return label + "\n" + url;
+    });
+  }
+
+  const out = document.getElementById("out");
+  const hint = document.getElementById("hint");
+  let text = "";
+
+  try {
+    const raw = location.hash.slice(1);
+    if (!raw) throw new Error("공유할 내용이 없습니다. 텔레그램의 '카톡 공유' 버튼으로 다시 열어주세요.");
+    const md = b64urlDecode(raw);
+    text = toBareLinks(md);
+    out.value = text;
+  } catch (e) {
+    out.value = "";
+    hint.innerHTML = '<span class="err">⚠️ ' + (e && e.message ? e.message : e) + "</span>";
+  }
+
+  document.getElementById("share").addEventListener("click", async () => {
+    if (!text) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+      } catch (e) {
+        if (e && e.name !== "AbortError") {
+          hint.innerHTML = '<span class="err">공유 실패: ' + e.message + ' — 아래 \'복사\'를 쓰세요.</span>';
+        }
+      }
+    } else {
+      hint.innerHTML = '<span class="err">이 브라우저는 공유 기능을 지원하지 않습니다. \'복사\' 버튼을 쓰세요.</span>';
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      hint.innerHTML = "✅ 복사됐습니다. 카카오톡에 붙여넣기 하세요.";
+    } catch (e) {
+      out.select();
+      document.execCommand("copy");
+      hint.innerHTML = "✅ 복사됐습니다 (수동). 카카오톡에 붙여넣기 하세요.";
+    }
+  });
+</script>
+</body>
+</html>
