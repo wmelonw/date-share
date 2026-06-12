@@ -76,20 +76,51 @@
     hint.innerHTML = '<span class="err">⚠️ ' + (e && e.message ? e.message : e) + "</span>";
   }
 
+  // id 가 ms 타임스탬프라 링크가 "방금 만든 것"인지 판별 가능. 발송 직후엔
+  // GitHub Pages 배포가 아직이라 30~90초 404 가 정상 — 그 윈도우는 폴링으로 흡수하고,
+  // 진짜 만료(오래된 id)·네트워크 오류와 구분해 각각 다른 안내를 보여준다.
+  const FRESH_MS = 5 * 60 * 1000;     // 이 안쪽 id 는 "배포 중"으로 간주
+  const RETRY_MS = 5000;
+  const MAX_TRIES = 24;               // 5초 × 24 = 최대 2분 폴링
+  async function fetchSnapshot(id) {
+    const fresh = Date.now() - Number(id) < FRESH_MS;
+    const tries = fresh ? MAX_TRIES : 1;
+    for (let i = 0; i < tries; i++) {
+      let res;
+      try {
+        // 재시도마다 캐시버스터를 바꿔 CDN 에 캐시된 404 를 우회
+        res = await fetch("s/" + id + ".json?r=" + Date.now(), { cache: "no-store" });
+      } catch (_) {
+        throw new Error("네트워크 오류로 불러오지 못했습니다. 연결 확인 후 새로고침 해주세요.");
+      }
+      if (res.ok) return res.json();
+      if (res.status === 404 && fresh && i < tries - 1) {
+        hint.innerHTML = "⏳ 공유 내용 배포 중입니다… 잠시만 기다려주세요 (" + (i + 1) + "/" + MAX_TRIES + ")";
+        await new Promise((r) => setTimeout(r, RETRY_MS));
+        continue;
+      }
+      throw new Error(
+        res.status !== 404 ? "공유 내용을 불러오지 못했습니다 (" + res.status + "). 새로고침 해주세요."
+        : fresh ? "배포가 늦어지고 있어요. 잠시 후 새로고침 해주세요."
+        : "오래된 공유라 만료됐어요. 새 추천을 받아 다시 공유해주세요."
+      );
+    }
+  }
+
   // 두 가지 진입:
   //  1) ?d=<id> (신규·짧음 ~45자) → s/<id>.json 을 fetch 해 본문을 받아온다.
-  //  2) #<base64url> (구버전·길다) → 해시를 그대로 디코드 (하위호환).
+  //  2) #<base64url> (구버전 + push 실패 시 폴백·길다) → 해시를 그대로 디코드.
+  const hintDefault = hint.innerHTML;
   (async () => {
     try {
       const params = new URLSearchParams(location.search);
       const id = params.get("d");
       if (id) {
         if (!/^\d+$/.test(id)) throw new Error("잘못된 공유 ID 입니다.");
-        const res = await fetch("s/" + id + ".json?v=" + id, { cache: "no-store" });
-        if (!res.ok) throw new Error("공유 내용을 불러오지 못했습니다 (" + res.status + "). 만료됐을 수 있어요.");
-        const data = await res.json();
+        const data = await fetchSnapshot(id);
         if (!data || !data.t) throw new Error("공유 내용이 비어 있습니다.");
         render(data.t);
+        hint.innerHTML = hintDefault; // 폴링 안내가 떠 있었다면 원래 안내로 복귀
         return;
       }
       const raw = location.hash.slice(1);
