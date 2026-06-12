@@ -79,9 +79,9 @@
   // id 가 ms 타임스탬프라 링크가 "방금 만든 것"인지 판별 가능. 발송 직후엔
   // GitHub Pages 배포가 아직이라 30~90초 404 가 정상 — 그 윈도우는 폴링으로 흡수하고,
   // 진짜 만료(오래된 id)·네트워크 오류와 구분해 각각 다른 안내를 보여준다.
-  const FRESH_MS = 5 * 60 * 1000;     // 이 안쪽 id 는 "배포 중"으로 간주
+  const FRESH_MS = 10 * 60 * 1000;    // 이 안쪽 id 는 "배포 중"으로 간주
   const RETRY_MS = 5000;
-  const MAX_TRIES = 24;               // 5초 × 24 = 최대 2분 폴링
+  const MAX_TRIES = 48;               // 5초 × 48 = 최대 4분 폴링 (빌드 큐잉 시 ~3분 실측)
   async function fetchSnapshot(id) {
     const fresh = Date.now() - Number(id) < FRESH_MS;
     const tries = fresh ? MAX_TRIES : 1;
